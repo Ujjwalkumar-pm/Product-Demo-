@@ -1,0 +1,21 @@
+{
+  "name": "product-demo-skill",
+  "description": "Turns a product screen recording plus a user-flow diagram into a polished, narrated, Apple-style product demo video",
+  "version": "1.0.0",
+  "author": {
+    "name": "Ujjwal Kumar",
+    "email": "ujjwalkumarjob1@gmail.com"
+  },
+  "homepage": "https://github.com/Ujjwalkumar-pm/claude-product-demo-skill",
+  "repository": "https://github.com/Ujjwalkumar-pm/claude-product-demo-skill",
+  "license": "MIT",
+  "keywords": [
+    "video",
+    "product-demo",
+    "voiceover",
+    "narration",
+    "screen-recording",
+    "ffmpeg",
+    "tts"
+  ]
+}

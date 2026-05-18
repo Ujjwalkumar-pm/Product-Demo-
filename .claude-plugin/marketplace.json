@@ -1,0 +1,20 @@
+{
+  "name": "product-demo-marketplace",
+  "description": "Marketplace for the Product Demo Video skill",
+  "owner": {
+    "name": "Ujjwal Kumar",
+    "email": "ujjwalkumarjob1@gmail.com"
+  },
+  "plugins": [
+    {
+      "name": "product-demo-skill",
+      "description": "Turns a product screen recording plus a user-flow diagram into a polished, narrated, Apple-style product demo video",
+      "version": "1.0.0",
+      "source": "./",
+      "author": {
+        "name": "Ujjwal Kumar",
+        "email": "ujjwalkumarjob1@gmail.com"
+      }
+    }
+  ]
+}

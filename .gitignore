@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Pipeline artifacts
+output/
+frames/
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.aac
+!examples/**/*.mp4
+
+# OS
+.DS_Store

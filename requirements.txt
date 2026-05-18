@@ -1,0 +1,3 @@
+# Minimal runtime deps. All media work uses system ffmpeg/ffprobe (no moviepy).
+# TTS providers are called via plain REST so no heavy SDKs are required.
+requests>=2.31.0
