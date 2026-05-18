@@ -6,6 +6,37 @@ to transparent PNGs here and composited by compose_video.py via overlay.
 from __future__ import annotations
 
 import copy
+import os
+from PIL import Image, ImageDraw, ImageFont
+
+_FONT_CANDIDATES = [
+    "/System/Library/Fonts/SFNS.ttf",                       # San Francisco
+    "/System/Library/Fonts/HelveticaNeue.ttc",
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+]
+
+
+def _font(size: int) -> ImageFont.FreeTypeFont:
+    for p in _FONT_CANDIDATES:
+        if os.path.exists(p):
+            try:
+                return ImageFont.truetype(p, size)
+            except OSError:
+                continue
+    return ImageFont.load_default()
+
+
+def _hex(c: str) -> tuple:
+    c = c.lstrip("#")
+    return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _center_text(draw, cx, y, text, font, fill):
+    bbox = draw.textbbox((0, 0), text, font=font)
+    w = bbox[2] - bbox[0]
+    draw.text((cx - w / 2, y), text, font=font, fill=fill)
+    return bbox[3] - bbox[1]
 
 PRESETS = {
     "apple": {
@@ -83,3 +114,47 @@ def kenburns_expr(mode: str, zoom: float, fps: int, duration: float,
     # keep the push centered
     return (f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
             f":d=1:s={w}x{h}:fps={fps}")
+
+
+def render_card(title: str, subtitle: str, s: dict,
+                w: int, h: int, out_path: str) -> bool:
+    """Full-screen hero/outro card on the preset background."""
+    img = Image.new("RGBA", (w, h), _hex(s["card_bg"]) + (255,))
+    d = ImageDraw.Draw(img)
+    title_font = _font(int(h * 0.11))
+    sub_font = _font(int(h * 0.045))
+    fg = _hex(s["card_fg"])
+    accent = _hex(s["accent"])
+    th = _center_text(d, w / 2, h * 0.40, title or "", title_font, fg + (255,))
+    if subtitle:
+        _center_text(d, w / 2, h * 0.40 + th + h * 0.06, subtitle,
+                     sub_font, accent + (235,))
+    img.save(out_path)
+    return True
+
+
+def render_caption(text: str, s: dict, w: int, h: int,
+                   out_path: str) -> bool:
+    """Transparent full-frame PNG with a lower-third caption bar."""
+    text = (text or "").strip()
+    if not text:
+        return False
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    bold = s["caption_style"] in ("bold",)
+    fsize = int(h * (0.052 if bold else 0.040))
+    font = _font(fsize)
+    bbox = d.textbbox((0, 0), text, font=font)
+    tw, tht = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    pad_x, pad_y = int(w * 0.02), int(h * 0.022)
+    bar_h = tht + pad_y * 2
+    bar_y = int(h * 0.84)
+    box_a = 170 if bold else 120
+    d.rectangle([0, bar_y, w, bar_y + bar_h], fill=(0, 0, 0, box_a))
+    if bold:  # Vox accent underline
+        d.rectangle([0, bar_y + bar_h - 6, w, bar_y + bar_h],
+                    fill=_hex(s["accent"]) + (255,))
+    d.text(((w - tw) / 2, bar_y + pad_y), text, font=font,
+           fill=(255, 255, 255, 245))
+    img.save(out_path)
+    return True

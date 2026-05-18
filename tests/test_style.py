@@ -1,4 +1,6 @@
 import style
+import os
+from PIL import Image
 
 
 def test_default_preset_is_apple():
@@ -46,3 +48,31 @@ def test_kenburns_expr_in_returns_zoompan():
 
 def test_kenburns_expr_none_is_passthrough():
     assert style.kenburns_expr("none", 1.0, 30, 3.0, 1280, 720) == "null"
+
+
+def test_render_card_writes_rgba_png(tmp_path):
+    s = style.resolve_style({})
+    out = os.path.join(tmp_path, "card.png")
+    style.render_card("Meet the Product", "A faster way to work", s,
+                      1280, 720, out)
+    assert os.path.exists(out)
+    im = Image.open(out)
+    assert im.mode == "RGBA"
+    assert im.size == (1280, 720)
+
+
+def test_render_caption_transparent_strip(tmp_path):
+    s = style.resolve_style({"style": "vox"})
+    out = os.path.join(tmp_path, "cap.png")
+    style.render_caption("Search finds it instantly", s, 1280, 720, out)
+    im = Image.open(out)
+    assert im.mode == "RGBA" and im.size == (1280, 720)
+    # top-left pixel must be fully transparent (caption sits at the bottom)
+    assert im.getpixel((5, 5))[3] == 0
+
+
+def test_render_caption_empty_text_is_noop(tmp_path):
+    s = style.resolve_style({})
+    out = os.path.join(tmp_path, "empty.png")
+    assert style.render_caption("", s, 1280, 720, out) is False
+    assert not os.path.exists(out)
