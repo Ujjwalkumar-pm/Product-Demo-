@@ -28,15 +28,27 @@ def _font(size: int) -> ImageFont.FreeTypeFont:
 
 
 def _hex(c: str) -> tuple:
+    """Parse a 6-digit '#rrggbb' (alpha byte tolerated and dropped)."""
     c = c.lstrip("#")
+    if len(c) == 8:          # #rrggbbaa -> drop alpha
+        c = c[:6]
+    if len(c) != 6:
+        raise ValueError(f"_hex expects a 6-digit hex color, got '{c}'")
     return tuple(int(c[i:i + 2], 16) for i in (0, 2, 4))
 
 
-def _center_text(draw, cx, y, text, font, fill):
-    bbox = draw.textbbox((0, 0), text, font=font)
+def _center_text(draw, cx: float, y: float, text: str, font,
+                  fill) -> int:
+    """Draw `text` horizontally centered at x=cx with its top at y.
+
+    anchor='lt' makes the bounding box top-left land exactly at the
+    passed coordinate so vertical spacing math is accurate.
+    """
+    bbox = draw.textbbox((0, 0), text, font=font, anchor="lt")
     w = bbox[2] - bbox[0]
-    draw.text((cx - w / 2, y), text, font=font, fill=fill)
+    draw.text((cx - w / 2, y), text, font=font, fill=fill, anchor="lt")
     return bbox[3] - bbox[1]
+
 
 PRESETS = {
     "apple": {
@@ -146,15 +158,16 @@ def render_caption(text: str, s: dict, w: int, h: int,
     font = _font(fsize)
     bbox = d.textbbox((0, 0), text, font=font)
     tw, tht = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    pad_x, pad_y = int(w * 0.02), int(h * 0.022)
+    pad_y = int(h * 0.022)
     bar_h = tht + pad_y * 2
     bar_y = int(h * 0.84)
     box_a = 170 if bold else 120
     d.rectangle([0, bar_y, w, bar_y + bar_h], fill=(0, 0, 0, box_a))
     if bold:  # Vox accent underline
-        d.rectangle([0, bar_y + bar_h - 6, w, bar_y + bar_h],
+        ul = max(int(h * 0.008), 3)
+        d.rectangle([0, bar_y + bar_h - ul, w, bar_y + bar_h],
                     fill=_hex(s["accent"]) + (255,))
     d.text(((w - tw) / 2, bar_y + pad_y), text, font=font,
-           fill=(255, 255, 255, 245))
+           fill=(255, 255, 255, 245), anchor="lt")
     img.save(out_path)
     return True

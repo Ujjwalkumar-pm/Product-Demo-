@@ -76,3 +76,24 @@ def test_render_caption_empty_text_is_noop(tmp_path):
     out = os.path.join(tmp_path, "empty.png")
     assert style.render_caption("", s, 1280, 720, out) is False
     assert not os.path.exists(out)
+
+
+def test_render_card_no_subtitle_returns_true(tmp_path):
+    s = style.resolve_style({})
+    out = os.path.join(tmp_path, "c2.png")
+    assert style.render_card("Just a title", "", s, 1280, 720, out) is True
+    assert Image.open(out).size == (1280, 720)
+
+
+def test_render_caption_thin_apple_style(tmp_path):
+    s = style.resolve_style({})  # apple -> caption_style "thin"
+    out = os.path.join(tmp_path, "thin.png")
+    assert style.render_caption("Calm and clear", s, 1280, 720, out) is True
+    im = Image.open(out)
+    assert im.mode == "RGBA" and im.getpixel((5, 5))[3] == 0
+
+
+def test_hex_rejects_bad_length():
+    import pytest
+    with pytest.raises(ValueError):
+        style._hex("#fff")
