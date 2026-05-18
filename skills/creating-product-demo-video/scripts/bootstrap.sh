@@ -20,6 +20,9 @@ fi
 source "$VENV/bin/activate"
 python -m pip install --quiet --upgrade pip
 python -m pip install --quiet -r "$REPO_ROOT/requirements.txt"
+if [ "${1:-}" = "--dev" ] && [ -f "$REPO_ROOT/requirements-dev.txt" ]; then
+  python -m pip install --quiet -r "$REPO_ROOT/requirements-dev.txt"
+fi
 
 echo "OK: ffmpeg=$(ffmpeg -version | head -1 | awk '{print $3}') python=$(python --version 2>&1 | awk '{print $2}')"
 echo "Activate with: source $VENV/bin/activate"

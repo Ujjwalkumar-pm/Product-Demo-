@@ -1,3 +1,5 @@
 # Minimal runtime deps. All media work uses system ffmpeg/ffprobe (no moviepy).
 # TTS providers are called via plain REST so no heavy SDKs are required.
 requests>=2.31.0
+# Typography is rendered to PNG (this ffmpeg build has no drawtext filter).
+pillow>=10.0.0
