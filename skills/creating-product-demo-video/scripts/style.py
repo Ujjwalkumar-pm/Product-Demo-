@@ -47,3 +47,39 @@ def resolve_style(timeline: dict) -> dict:
     if isinstance(overrides, dict):
         s.update(overrides)
     return s
+
+
+def clamp_focus(focus: dict) -> tuple:
+    """Normalize a {x,y,w,h} focus rect into safe 0-1 bounds."""
+    def c(v, lo, hi, default):
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return default
+        return max(lo, min(hi, v))
+    w = c(focus.get("w"), 0.05, 1.0, 0.5)
+    h = c(focus.get("h"), 0.05, 1.0, 0.5)
+    x = c(focus.get("x"), 0.0, 1.0, 0.25)
+    y = c(focus.get("y"), 0.0, 1.0, 0.25)
+    return (x, y, w, h)
+
+
+def kenburns_expr(mode: str, zoom: float, fps: int, duration: float,
+                  w: int, h: int) -> str:
+    """Build a zoompan filter string for a slow push, or 'null' if none.
+
+    'in'    : slow zoom in to `zoom`
+    'out'   : slow zoom out from `zoom`
+    'punch' : faster zoom in (Vox)
+    'none'  : passthrough
+    """
+    if mode == "none" or zoom <= 1.0:
+        return "null"
+    frames = max(int(round(duration * fps)), 1)
+    if mode == "out":
+        z = f"if(eq(on,0),{zoom:.4f},max(zoom-{(zoom - 1) / frames:.6f},1.0))"
+    else:  # in / punch
+        z = f"min(zoom+{(zoom - 1) / frames:.6f},{zoom:.4f})"
+    # keep the push centered
+    return (f"zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            f":d=1:s={w}x{h}:fps={fps}")

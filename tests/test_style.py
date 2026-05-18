@@ -24,3 +24,25 @@ def test_style_overrides_shallow_merge():
     s = style.resolve_style({"style": "apple", "style_overrides": {"pad": 0.1}})
     assert s["pad"] == 0.1
     assert s["name"] == "apple"
+
+
+def test_clamp_focus_in_range():
+    assert style.clamp_focus({"x": 0.2, "y": 0.1, "w": 0.5, "h": 0.4}) == \
+        (0.2, 0.1, 0.5, 0.4)
+
+
+def test_clamp_focus_out_of_range():
+    # negative and >1 values clamped; zero/oversize w,h fixed to sane bounds
+    x, y, w, h = style.clamp_focus({"x": -0.3, "y": 1.5, "w": 2.0, "h": 0.0})
+    assert 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0
+    assert 0.05 <= w <= 1.0 and 0.05 <= h <= 1.0
+
+
+def test_kenburns_expr_in_returns_zoompan():
+    expr = style.kenburns_expr("in", 1.08, fps=30, duration=3.0, w=1280, h=720)
+    assert expr.startswith("zoompan=")
+    assert "1280" in expr and "720" in expr
+
+
+def test_kenburns_expr_none_is_passthrough():
+    assert style.kenburns_expr("none", 1.0, 30, 3.0, 1280, 720) == "null"
