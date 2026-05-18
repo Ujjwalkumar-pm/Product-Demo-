@@ -1,5 +1,6 @@
 import style
 import os
+import lib
 from PIL import Image
 
 
@@ -97,3 +98,8 @@ def test_hex_rejects_bad_length():
     import pytest
     with pytest.raises(ValueError):
         style._hex("#fff")
+
+
+def test_font_path_returns_existing_file_or_none():
+    p = lib.font_path()
+    assert p is None or os.path.exists(p)

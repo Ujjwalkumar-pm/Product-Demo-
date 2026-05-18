@@ -104,3 +104,14 @@ def escape_drawtext(text: str) -> str:
     text = text.replace(":", " -").replace("'", "").replace('"', "")
     text = text.replace("%", " percent").replace("\n", " ")
     return text.strip()
+
+
+def font_path() -> Optional[str]:
+    """First available bold/system font for Pillow typography."""
+    for f in ("/System/Library/Fonts/SFNS.ttf",
+              "/System/Library/Fonts/HelveticaNeue.ttc",
+              "/System/Library/Fonts/Supplemental/Arial Bold.ttf") + tuple(
+                  _FONT_CANDIDATES):
+        if os.path.exists(f):
+            return f
+    return None
