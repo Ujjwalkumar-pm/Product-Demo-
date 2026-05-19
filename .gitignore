@@ -12,6 +12,7 @@ frames/
 *.mp3
 *.aac
 !examples/**/*.mp4
+!assets/demo.mp4
 
 # OS
 .DS_Store
