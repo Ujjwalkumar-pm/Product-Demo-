@@ -5,6 +5,16 @@
   "type": "object",
   "required": ["source_video", "segments"],
   "properties": {
+    "style": {
+      "type": "string",
+      "enum": ["apple", "vox", "clean"],
+      "default": "apple",
+      "description": "Production style preset."
+    },
+    "style_overrides": {
+      "type": "object",
+      "description": "Shallow-merged over the chosen preset (advanced)."
+    },
     "source_video": {
       "type": "string",
       "description": "Path to the original product screen recording."
@@ -24,7 +34,12 @@
       "type": "object",
       "properties": {
         "path": { "type": "string", "description": "Optional background music file." },
-        "gain_db": { "type": "number", "default": -22, "description": "Music level under narration." }
+        "gain_db": { "type": "number", "default": -22, "description": "Music level under narration." },
+        "mood": {
+          "type": "string",
+          "enum": ["ambient", "pulse", "none"],
+          "description": "Procedural bed used when no music.path is given (preset picks a default)."
+        }
       }
     },
     "segments": {
@@ -32,13 +47,29 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id", "source_in", "source_out", "narration"],
+        "required": ["id"],
         "properties": {
           "id": { "type": "string", "description": "Stable segment id, e.g. 's01'." },
+          "kind": {
+            "type": "string",
+            "enum": ["intro", "content", "outro"],
+            "default": "content",
+            "description": "intro/outro render a title card; content uses footage."
+          },
+          "title": { "type": "string", "description": "Card headline (intro/outro)." },
+          "subtitle": { "type": "string", "description": "Card sub-line (intro/outro)." },
           "source_in": { "type": "number", "description": "Start time in source video (seconds)." },
           "source_out": { "type": "number", "description": "End time in source video (seconds)." },
           "narration": { "type": "string", "description": "Apple-style line(s) Claude wrote for this beat. Empty string = silent beat." },
           "caption": { "type": "string", "description": "Optional on-screen caption burned over this segment." },
+          "focus": {
+            "type": "object",
+            "description": "Normalized 0-1 region to spotlight (punch-in + dim/blur around).",
+            "properties": {
+              "x": { "type": "number" }, "y": { "type": "number" },
+              "w": { "type": "number" }, "h": { "type": "number" }
+            }
+          },
           "pace": {
             "type": "string",
             "enum": ["auto", "trim", "hold", "slow", "as_is"],
@@ -51,6 +82,12 @@
             "enum": ["none", "fade", "dissolve"],
             "default": "dissolve",
             "description": "Transition into this segment."
+          },
+          "kenburns": {
+            "type": "string",
+            "enum": ["auto", "in", "out", "punch", "none"],
+            "default": "auto",
+            "description": "Per-segment motion override; auto = preset default."
           }
         }
       }

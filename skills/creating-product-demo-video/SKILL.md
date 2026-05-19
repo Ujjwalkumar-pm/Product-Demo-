@@ -42,11 +42,23 @@ It writes `work/meta.json` (duration, resolution, fps) and `work/frames/` (scene
 keyframes + timestamped samples). **Read the keyframes and the flow diagram with vision.**
 
 ### Phase 2 — Script & timeline (you do this)
-Build a storyboard: order the UI steps from the diagram, map each to a `[source_in, source_out]`
-window in the footage using the keyframe timestamps. Then write **Apple-style narration** per
-segment — concise, benefit-led, present tense, one idea per beat, confident and calm. Emit
-`work/timeline.json` conforming to `data/timeline.schema.json`. Keep narration short enough that
-re-pacing stays within `max_speedup`. Validate it parses against the schema before continuing.
+Build a storyboard: order the UI steps from the diagram, map each to a
+`[source_in, source_out]` window using the keyframe timestamps. Then write
+**narration** in the chosen style register and emit `work/timeline.json`
+(schema: `data/timeline.schema.json`).
+
+**Style presets** (`"style"`: `apple` default, `vox`, `clean`):
+- **apple** — calm, confident, present tense, one idea per beat, generous
+  pauses. Short sentences. Lead with the benefit. Add an `intro` segment
+  (product name as `title`, value prop as `subtitle`) and an `outro`.
+- **vox** — energetic, explanatory, tighter. Use `caption` on every content
+  segment and set `focus` `{x,y,w,h}` (normalized 0-1) on the UI element the
+  line is about for a spotlight punch-in.
+- **clean** — minimal: captions only, no cards motion.
+
+Per content segment set `caption` (kinetic lower-third) and optionally
+`focus` and `kenburns`. Keep narration short enough that re-pacing stays
+within `max_speedup`. Validate against the schema before continuing.
 
 ### Phase 3 — Voiceover
 Run `scripts/tts_render.py --timeline work/timeline.json --out work/`.
@@ -75,6 +87,7 @@ If any segment delta is large, revise that segment's narration in Phase 2 and re
 | Render voiceover | `tts_render.py --timeline work/timeline.json --out work/` |
 | Render final video | `compose_video.py --timeline work/timeline.json --video V --out output/` |
 | Force a voice engine | `--engine elevenlabs|openai|say` on `tts_render.py` |
+| Pick a style | add `"style":"apple|vox|clean"` to timeline, or `--style` on compose |
 
 ## Common Mistakes
 
@@ -87,3 +100,7 @@ If any segment delta is large, revise that segment's narration in Phase 2 and re
 - **Guessing timestamps** — use the keyframe timestamps in `work/frames/`, not estimates.
 - **Editing the original video in place** — never; only write under `work/` and `output/`.
 - **Installing moviepy / heavy SDKs** — unnecessary; ffmpeg + REST `requests` cover everything.
+- **No intro/outro for apple/vox** — add `kind:"intro"` and `kind:"outro"`
+  card segments; they define the produced feel.
+- **Vox without `focus`** — spotlight callouts need a `focus` rect; without
+  it Vox segments are just zoomed.
