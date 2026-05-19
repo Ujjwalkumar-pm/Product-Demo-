@@ -31,6 +31,23 @@ The skill auto-selects the best engine available; it always works even with no k
 2. **OpenAI TTS** — set `OPENAI_API_KEY`
 3. **macOS `say`** — built in, zero cost, no key (default fallback)
 
+## Style presets
+
+| Preset | Feel | Motion | Typography | Music |
+|--------|------|--------|------------|-------|
+| `apple` (default) | calm, premium | subtle Ken Burns | SF Pro hero cards | soft ambient pad |
+| `vox` | energetic, explanatory | punch-in spotlight | bold kinetic captions | rhythmic pulse |
+| `clean` | minimal | none | small captions | none |
+
+Set per project with `"style"` in `timeline.json`, or override at render time:
+
+```bash
+python .../compose_video.py --timeline work/timeline.json --video product.mov --out output/ --style vox
+```
+
+Music: a user-supplied `music.path` is used and ducked under narration;
+otherwise a royalty-free bed is synthesized per preset.
+
 ## Requirements
 
 - macOS (for the `say` fallback) — other engines work cross-platform
