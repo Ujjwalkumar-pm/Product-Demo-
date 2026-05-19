@@ -16,10 +16,16 @@ import subprocess
 import tempfile
 
 import style
-from lib import ffprobe_info, run
+from lib import ffprobe_duration, ffprobe_info, run
 
 PAD = 0.4
 MIN_T = 0.6
+
+# PAD/MIN_T are defaults only when compute_plan is called outside a style
+# context; in a normal run main() passes s["pad"]/s["min_t"] from the preset.
+CARD_TAIL = 0.5      # extra seconds a card holds past its narration
+CARD_ZOOM_RATE = 0.0006
+CARD_ZOOM_MAX = 1.04
 
 
 def compute_plan(seg: dict, clip_len: float, pad: float = PAD,
@@ -64,12 +70,12 @@ def _grade(vf: list, s: dict):
         vf.append(s["grade"])
 
 
-def _spotlight(vf: list, focus: dict, W: int, H: int):
+def _spotlight(focus: dict, W: int, H: int) -> str:
     """Dim+blur the frame and overlay a sharp, zoomed crop of the focus rect."""
     x, y, w, h = style.clamp_focus(focus)
     cx, cy = int(W * x), int(H * y)
     cw, ch = max(int(W * w), 16), max(int(H * h), 16)
-    vf.append(
+    return (
         f"split=2[bg][fg];"
         f"[bg]gblur=sigma=18,eq=brightness=-0.10[bg2];"
         f"[fg]crop={cw}:{ch}:{cx}:{cy},scale={W}:{H}"
@@ -105,17 +111,15 @@ def build_segment(seg, src, info, plan, s, idx, tmpdir):
     kb = seg.get("kenburns", "auto")
     if kb == "auto":
         kb = s["kenburns"]
+    kbx = style.kenburns_expr(
+        "in" if kb in ("punch", "in", "auto") else kb,
+        s["kb_zoom"] if kb != "none" else 1.0, FPS, T, W, H)
+    if kbx != "null":
+        parts.append(kbx)
     if focus:
-        # spotlight is its own multi-pad chain; build it, then ken-burns the result
-        sl = []
-        _spotlight(sl, focus, W, H)
-        chain = ",".join(parts) + "[v0];[v0]" + sl[0]
+        # Ken Burns already applied above; now spotlight the focus region.
+        chain = ",".join(parts) + "[v0];[v0]" + _spotlight(focus, W, H)
     else:
-        kbx = style.kenburns_expr(
-            "in" if kb in ("punch", "in", "auto") else kb,
-            s["kb_zoom"] if kb != "none" else 1.0, FPS, T, W, H)
-        if kbx != "null":
-            parts.append(kbx)
         chain = ",".join(parts)
     chain += ",format=yuv420p[v]"
 
@@ -166,7 +170,7 @@ def build_card(seg, info, s, idx, tmpdir):
     FPS = int(round(info["fps"] or 30))
     audio = seg.get("audio_path")
     narr = float(seg.get("audio_duration") or 0.0)
-    T = round(max(narr + 0.5, s["card_dur"]), 3)
+    T = round(max(narr + CARD_TAIL, s["card_dur"]), 3)
     png = os.path.join(tmpdir, f"card_{idx:03d}.png")
     style.render_card(seg.get("title", ""), seg.get("subtitle", ""),
                       s, W, H, png)
@@ -183,7 +187,7 @@ def build_card(seg, info, s, idx, tmpdir):
         af = "[1:a]aresample=48000[a]"
     # gentle scale-in + fade for the hero card
     vf = (f"[0:v]scale={W}:{H},setsar=1,fps={FPS},"
-          f"zoompan=z='min(zoom+0.0006,1.04)':d=1:s={W}x{H}:fps={FPS},"
+          f"zoompan=z='min(zoom+{CARD_ZOOM_RATE},{CARD_ZOOM_MAX})':d=1:s={W}x{H}:fps={FPS},"
           f"fade=t=in:st=0:d=0.5,"
           f"fade=t=out:st={max(T - 0.5, 0):.3f}:d=0.5,"
           f"format=yuv420p[v]")
@@ -200,9 +204,13 @@ def stitch(seg_files, s, tmpdir, dst):
     if s["transition"] == "cut" or len(seg_files) == 1:
         return _concat_copy(seg_files, tmpdir, dst)
     xd = float(s["xfade_dur"])
-    durs = [float(run(["ffprobe", "-v", "error", "-show_entries",
-            "format=duration", "-of",
-            "default=nw=1:nk=1", f]).strip()) for f in seg_files]
+    durs = [ffprobe_duration(f) for f in seg_files]
+    if any(d <= 0 for d in durs):
+        return _concat_copy(seg_files, tmpdir, dst)
+    if any(d < xd for d in durs):
+        print(f"warning: a segment is shorter than xfade_dur={xd}; "
+              f"using hard cuts instead")
+        return _concat_copy(seg_files, tmpdir, dst)
     inputs = []
     for f in seg_files:
         inputs += ["-i", f]
@@ -224,6 +232,8 @@ def stitch(seg_files, s, tmpdir, dst):
          "-c:a", "aac", "-ar", "48000", dst],
         capture_output=True, text=True)
     if res.returncode != 0:
+        print(f"warning: xfade failed ({res.stderr.strip()[:140]}); "
+              f"falling back to concat")
         return _concat_copy(seg_files, tmpdir, dst)
     return dst
 
@@ -285,7 +295,10 @@ def add_music(video, tl, s, tmpdir):
          "-map", "0:v", "-map", "[a]", "-c:v", "copy",
          "-c:a", "aac", "-ar", "48000", "-shortest", mixed],
         capture_output=True, text=True)
-    return mixed if res.returncode == 0 else video
+    if res.returncode != 0:
+        print("warning: music mix failed; output will have no music bed")
+        return video
+    return mixed
 
 
 def qa(final, plans, s):
