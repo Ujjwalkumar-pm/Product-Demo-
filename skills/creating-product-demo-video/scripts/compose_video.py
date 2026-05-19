@@ -204,6 +204,9 @@ def stitch(seg_files, s, tmpdir, dst):
     if s["transition"] == "cut" or len(seg_files) == 1:
         return _concat_copy(seg_files, tmpdir, dst)
     xd = float(s["xfade_dur"])
+    xtype = s.get("transition", "fade")
+    if xtype not in ("fade", "dissolve", "wipeleft", "smoothleft", "circleopen"):
+        xtype = "fade"
     durs = [ffprobe_duration(f) for f in seg_files]
     if any(d <= 0 for d in durs):
         return _concat_copy(seg_files, tmpdir, dst)
@@ -220,7 +223,7 @@ def stitch(seg_files, s, tmpdir, dst):
         offset += durs[i - 1] - xd
         v_out = f"[v{i}]"
         a_out = f"[a{i}]"
-        fc.append(f"{vlab}[{i}:v]xfade=transition=fade:duration={xd}"
+        fc.append(f"{vlab}[{i}:v]xfade=transition={xtype}:duration={xd}"
                   f":offset={offset:.3f}{v_out}")
         fc.append(f"{alab}[{i}:a]acrossfade=d={xd}{a_out}")
         vlab, alab = v_out, a_out

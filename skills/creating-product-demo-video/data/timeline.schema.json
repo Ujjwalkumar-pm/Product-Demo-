@@ -85,7 +85,7 @@
           },
           "kenburns": {
             "type": "string",
-            "enum": ["auto", "in", "out", "left", "right", "none"],
+            "enum": ["auto", "in", "out", "punch", "none"],
             "default": "auto",
             "description": "Per-segment motion override; auto = preset default."
           }
