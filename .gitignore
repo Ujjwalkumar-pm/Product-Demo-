@@ -1,0 +1,22 @@
+# HyperFrames
+renders/
+.thumbnails/
+.hyperframes-cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Env
+.env
+.env.local
