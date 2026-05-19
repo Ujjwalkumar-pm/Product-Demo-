@@ -58,7 +58,7 @@ PRESETS = {
         "grade": "eq=contrast=1.06:saturation=1.05,vignette=PI/5",
         "card_bg": "#000000", "card_fg": "#ffffff",
         "caption_style": "thin", "accent": "#2997ff",
-        "music_mood": "ambient", "music_db": -22.0, "card_dur": 2.6,
+        "music_mood": "ambient", "music_db": -22.0, "card_dur": 3.8,
     },
     "vox": {
         "name": "vox", "pad": 0.20, "min_t": 0.8,
