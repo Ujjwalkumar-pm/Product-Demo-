@@ -78,9 +78,17 @@ function buildToken(username: string): string {
 
 function verifyToken(token: string | undefined): { username: string } | null {
   if (!token) return null;
-  const parts = token.split(".");
-  if (parts.length !== 3) return null;
-  const [username, expStr, sig] = parts;
+  // Parse from the right since usernames may contain "." (emails, domain TLDs).
+  // Token format: `${username}.${expSeconds}.${sigHex}`
+  const lastDot = token.lastIndexOf(".");
+  if (lastDot < 1) return null;
+  const sig = token.slice(lastDot + 1);
+  const beforeSig = token.slice(0, lastDot);
+  const secondLastDot = beforeSig.lastIndexOf(".");
+  if (secondLastDot < 1) return null;
+  const expStr = beforeSig.slice(secondLastDot + 1);
+  const username = beforeSig.slice(0, secondLastDot);
+  if (!username) return null;
   const payload = `${username}.${expStr}`;
   let expected: string;
   try {
