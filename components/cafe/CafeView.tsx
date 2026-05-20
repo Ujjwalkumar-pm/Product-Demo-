@@ -6,7 +6,9 @@ import {
   submitFeedback,
   type CafeConfig,
 } from "@/lib/actions";
+import { logoutPwa } from "@/lib/auth";
 import { DEVICE_ID, ratingWords } from "@/lib/seed-data";
+import CafeLogin from "./CafeLogin";
 
 type ScreenId = "welcome" | "vendor" | "rate" | "tags" | "comment" | "ty";
 const screens: ScreenId[] = ["welcome", "vendor", "rate", "tags", "comment", "ty"];
@@ -37,7 +39,8 @@ type AppState = {
   positiveTags: string[];
   negativeTags: string[];
   comment: string;
-  contact: string;
+  name: string;
+  mobile: string;
 };
 
 const emptyState = (): AppState => ({
@@ -47,8 +50,11 @@ const emptyState = (): AppState => ({
   positiveTags: [],
   negativeTags: [],
   comment: "",
-  contact: "",
+  name: "",
+  mobile: "",
 });
+
+const MOBILE_RE = /^\d{10}$/;
 
 function formatJSON(obj: unknown) {
   let str = JSON.stringify(obj, null, 2);
@@ -61,18 +67,40 @@ function formatJSON(obj: unknown) {
 export default function CafeView({
   centreId,
   initialConfig,
+  initialUser,
 }: {
   centreId: string;
   initialConfig?: CafeConfig;
+  initialUser?: string | null;
 }) {
   const [config, setConfig] = useState<CafeConfig | null>(initialConfig ?? null);
+  const [user, setUser] = useState<string | null>(initialUser ?? null);
   const [currentScreen, setCurrentScreen] = useState<ScreenId>("welcome");
-  const [state, setState] = useState<AppState>(emptyState());
+  const [state, setState] = useState<AppState>(() => {
+    const s = emptyState();
+    if (initialUser) s.name = initialUser;
+    return s;
+  });
   const [ref, setRef] = useState("FB-2026-00X");
   const [count, setCount] = useState(8);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const onLoggedIn = (username: string) => {
+    setUser(username);
+    setState((s) => ({ ...emptyState(), name: username }));
+    setCurrentScreen("welcome");
+    setError(null);
+  };
+
+  const onSwitchUser = async () => {
+    await logoutPwa();
+    setUser(null);
+    setState(emptyState());
+    setCurrentScreen("welcome");
+    setError(null);
+  };
 
   useEffect(() => {
     if (!initialConfig) {
@@ -81,10 +109,14 @@ export default function CafeView({
   }, [centreId, initialConfig]);
 
   const resetFlow = useCallback(() => {
-    setState(emptyState());
+    setState(() => {
+      const s = emptyState();
+      if (user) s.name = user;
+      return s;
+    });
     setCurrentScreen("welcome");
     setError(null);
-  }, []);
+  }, [user]);
 
   const goTo = (screen: ScreenId) => {
     setError(null);
@@ -124,19 +156,80 @@ export default function CafeView({
     );
   }
 
+  if (!user) {
+    return (
+      <div className="cafe-stage">
+        <div className="tablet-area">
+          <div className="tablet">
+            <div className="tablet-status">
+              <span>9:41</span>
+              <span className="right">5G · 100%</span>
+            </div>
+            <div className="pwa-content">
+              <CafeLogin
+                centreShort={config.centreShort}
+                onLogin={onLoggedIn}
+              />
+            </div>
+          </div>
+        </div>
+        <div className="state-panel">
+          <div className="sp-header">
+            <div className="sp-title">Wireframe Inspector</div>
+            <div className="live-dot">
+              <span className="d"></span>Login required
+            </div>
+          </div>
+          <div className="schema-label">Status</div>
+          <div className="sp-data">
+            <div className="sp-row">
+              <span className="k">Tablet</span>
+              <span className="v empty">Awaiting sign-in</span>
+            </div>
+            <div className="sp-row">
+              <span className="k">Centre</span>
+              <span className="v">{config.centreName}</span>
+            </div>
+          </div>
+          <p
+            style={{
+              fontSize: 11,
+              color: "var(--ink-3)",
+              marginTop: 14,
+              lineHeight: 1.5,
+            }}
+          >
+            The feedback flow unlocks once an authorised Smartworks login signs
+            in on the tablet. Manage logins under Admin → Cafe PWA login
+            credentials.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const vendorName = state.vendorId
     ? config.vendors.find((v) => v.id === state.vendorId)?.name ?? null
     : null;
   const contextPill = vendorName ?? config.centreShort;
 
+  const lowRating = state.overall > 0 && state.overall <= 2;
+  const contactRequired = Boolean(config.mandatoryContactLow) && lowRating;
+  const trimmedName = state.name.trim();
+  const trimmedMobile = state.mobile.trim();
+  const mobileFormatBad = trimmedMobile !== "" && !MOBILE_RE.test(trimmedMobile);
+
   const submit = async () => {
-    if (
-      config.mandatoryContactLow &&
-      state.overall > 0 &&
-      state.overall <= 2 &&
-      !state.contact.trim()
-    ) {
-      setError("Please share a mobile or employee ID so we can follow up on this.");
+    if (contactRequired && !trimmedName) {
+      setError("Please share your name so we can follow up.");
+      return;
+    }
+    if (contactRequired && !MOBILE_RE.test(trimmedMobile)) {
+      setError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
+    if (mobileFormatBad) {
+      setError("Mobile number must be exactly 10 digits.");
       return;
     }
     setSubmitting(true);
@@ -148,7 +241,9 @@ export default function CafeView({
       positiveTags: state.positiveTags,
       negativeTags: state.negativeTags,
       comment: state.comment,
-      contact: state.contact,
+      contact: "",
+      name: trimmedName,
+      mobile: trimmedMobile,
     });
     setSubmitting(false);
     if (res.ok) {
@@ -176,9 +271,15 @@ export default function CafeView({
 
   const idx = screens.indexOf(currentScreen);
   const footerHidden = currentScreen === "welcome" || currentScreen === "ty";
+  const commentBlocked =
+    currentScreen === "comment" &&
+    (mobileFormatBad ||
+      (contactRequired &&
+        (!trimmedName || !MOBILE_RE.test(trimmedMobile))));
   const nextDisabled =
     (currentScreen === "vendor" && !state.vendorId) ||
     (currentScreen === "rate" && state.overall === 0) ||
+    commentBlocked ||
     submitting;
 
   const toggleTag = (type: "pos" | "neg", tag: string) => {
@@ -200,7 +301,8 @@ export default function CafeView({
     positive_tags: state.positiveTags,
     negative_tags: state.negativeTags,
     comment: state.comment || null,
-    contact: state.contact || null,
+    name: trimmedName || null,
+    mobile: trimmedMobile || null,
     device_id: DEVICE_ID,
     submitted_at: new Date().toISOString().slice(0, 19) + "Z",
     auto_ticket: state.overall > 0 && state.overall <= 2,
@@ -246,7 +348,14 @@ export default function CafeView({
                 <span className="arrow">→</span>
               </button>
               <div className="timer-tag">
-                Anonymous by default · Auto-resets in 60s
+                Signed in as <b>{user}</b> ·{" "}
+                <button
+                  type="button"
+                  className="switch-user"
+                  onClick={onSwitchUser}
+                >
+                  Switch user
+                </button>
               </div>
             </div>
 
@@ -414,18 +523,56 @@ export default function CafeView({
                   }
                 />
               )}
-              {config.askContact && (
-                <div className="contact-row">
-                  <span style={{ fontSize: 18 }}>✱</span>
-                  <input
-                    type="text"
-                    placeholder="Mobile or Employee ID (optional)"
-                    value={state.contact}
-                    onChange={(e) =>
-                      setState((s) => ({ ...s, contact: e.target.value }))
-                    }
-                  />
-                </div>
+              {(config.askContact || contactRequired) && (
+                <>
+                  <div className="contact-row">
+                    <span style={{ fontSize: 18 }}>✱</span>
+                    <input
+                      type="text"
+                      placeholder={
+                        contactRequired ? "Name (required)" : "Name (optional)"
+                      }
+                      value={state.name}
+                      autoComplete="name"
+                      onChange={(e) =>
+                        setState((s) => ({ ...s, name: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="contact-row" style={{ marginTop: 8 }}>
+                    <span style={{ fontSize: 18 }}>☎</span>
+                    <input
+                      type="tel"
+                      inputMode="numeric"
+                      pattern="\d{10}"
+                      maxLength={10}
+                      placeholder={
+                        contactRequired
+                          ? "10-digit mobile (required)"
+                          : "10-digit mobile (optional)"
+                      }
+                      value={state.mobile}
+                      autoComplete="tel-national"
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setState((s) => ({ ...s, mobile: digits }));
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+              {contactRequired && (
+                <p
+                  style={{
+                    fontSize: 10,
+                    color: "var(--red)",
+                    marginTop: 8,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Low ratings need a contact — please share your name and mobile
+                  so we can follow up.
+                </p>
               )}
               <p
                 style={{
@@ -435,9 +582,21 @@ export default function CafeView({
                   lineHeight: 1.5,
                 }}
               >
-                Leave blank to stay anonymous. We&apos;ll only reach out if you
-                share contact and there&apos;s a service issue.
+                {contactRequired
+                  ? "We'll only reach out about this service issue."
+                  : "Leave blank to stay anonymous. We'll only reach out if you share contact and there's a service issue."}
               </p>
+              {mobileFormatBad && (
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "var(--red)",
+                    marginTop: 6,
+                  }}
+                >
+                  Mobile number must be exactly 10 digits.
+                </p>
+              )}
               {error && (
                 <p
                   style={{
@@ -569,9 +728,15 @@ export default function CafeView({
             </span>
           </div>
           <div className="sp-row">
-            <span className="k">Contact</span>
-            <span className={`v ${state.contact ? "" : "empty"}`}>
-              {state.contact || "anonymous"}
+            <span className="k">Name</span>
+            <span className={`v ${trimmedName ? "" : "empty"}`}>
+              {trimmedName || "anonymous"}
+            </span>
+          </div>
+          <div className="sp-row">
+            <span className="k">Mobile</span>
+            <span className={`v ${trimmedMobile ? "" : "empty"}`}>
+              {trimmedMobile || "anonymous"}
             </span>
           </div>
         </div>

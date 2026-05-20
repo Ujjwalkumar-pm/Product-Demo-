@@ -11,11 +11,13 @@ export default function Shell({
   cafeCentreId,
   initialCafeConfig,
   initialAdminData,
+  initialPwaUser,
 }: {
   centres: Centre[];
   cafeCentreId: string;
   initialCafeConfig: CafeConfig;
   initialAdminData: AdminData;
+  initialPwaUser: string | null;
 }) {
   const [view, setView] = useState<"cafe" | "admin">("cafe");
   // Bumped whenever admin changes config/stores for the cafe's centre, so the
@@ -55,6 +57,7 @@ export default function Shell({
           key={cafeReloadKey}
           centreId={cafeCentreId}
           initialConfig={cafeReloadKey === 0 ? initialCafeConfig : undefined}
+          initialUser={initialPwaUser}
         />
       </div>
 

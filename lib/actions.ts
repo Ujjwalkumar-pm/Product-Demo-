@@ -1,8 +1,14 @@
 "use server";
 
-import { and, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq, gte, gt } from "drizzle-orm";
 import { getDb } from "./db";
-import { centres, centreConfig, stores, feedback } from "./schema";
+import {
+  centres,
+  centreConfig,
+  stores,
+  feedback,
+  adminUsers,
+} from "./schema";
 import {
   allCategories,
   DEVICE_ID,
@@ -12,6 +18,9 @@ import {
   defaultRouting,
   type Routing,
 } from "./seed-data";
+import { hashPassword, requirePwa } from "./auth";
+
+const MOBILE_RE = /^\d{10}$/;
 
 const COOLDOWN_MS = 15 * 60 * 1000; // 1 submission per vendor per device / 15 min
 
@@ -41,6 +50,7 @@ export type AdminData = {
   centreId: string;
   stores: AdminStore[];
   activeCategories: string[];
+  customCategories: { id: string; name: string }[];
   positiveTags: string[];
   negativeTags: string[];
   showComment: boolean;
@@ -61,6 +71,7 @@ async function ensureConfig(centreId: string) {
     .values({
       centreId,
       activeCategories: defaultActiveCategories,
+      customCategories: [],
       positiveTags: defaultPosTags,
       negativeTags: defaultNegTags,
       showComment: true,
@@ -81,13 +92,17 @@ export async function getCafeConfig(centreId: string): Promise<CafeConfig> {
     .from(stores)
     .where(and(eq(stores.centreId, centreId), eq(stores.live, true)));
 
+  const catalog: { id: string; name: string }[] = [
+    ...allCategories,
+    ...cfg.customCategories,
+  ];
   return {
     centreId,
     centreName: centre?.name ?? centreId,
     centreShort: centre?.short ?? centreId,
     vendors: liveStores.map((s) => ({ id: s.id, name: s.name, cat: s.cat, initial: s.initial })),
     categories: cfg.activeCategories
-      .map((id) => allCategories.find((c) => c.id === id))
+      .map((id) => catalog.find((c) => c.id === id))
       .filter((c): c is { id: string; name: string } => Boolean(c)),
     positiveTags: cfg.positiveTags,
     negativeTags: cfg.negativeTags,
@@ -116,6 +131,7 @@ export async function getAdminData(centreId: string): Promise<AdminData> {
       fb7d: s.fb7d,
     })),
     activeCategories: cfg.activeCategories,
+    customCategories: cfg.customCategories,
     positiveTags: cfg.positiveTags,
     negativeTags: cfg.negativeTags,
     showComment: cfg.showComment,
@@ -134,6 +150,8 @@ export type SubmitPayload = {
   negativeTags: string[];
   comment: string;
   contact: string;
+  name: string;
+  mobile: string;
 };
 
 export type SubmitResult =
@@ -141,9 +159,35 @@ export type SubmitResult =
   | { ok: false; error: string };
 
 export async function submitFeedback(p: SubmitPayload): Promise<SubmitResult> {
+  await requirePwa();
   if (!p.vendorId) return { ok: false, error: "Please pick a vendor." };
   if (!p.overall || p.overall < 1 || p.overall > 5)
     return { ok: false, error: "Please give an overall rating." };
+
+  const name = (p.name ?? "").trim();
+  const mobile = (p.mobile ?? "").trim();
+
+  // 10-digit mobile validation whenever a mobile is provided.
+  if (mobile && !MOBILE_RE.test(mobile)) {
+    return { ok: false, error: "Mobile number must be exactly 10 digits." };
+  }
+
+  // Low-rating gate: when this centre requires contact on low ratings,
+  // name + mobile become mandatory for overall ≤ 2.
+  if (p.overall <= 2) {
+    const cfg = await ensureConfig(p.centreId);
+    if (cfg.mandatoryContactLow) {
+      if (!name) {
+        return { ok: false, error: "Please share your name so we can follow up." };
+      }
+      if (!MOBILE_RE.test(mobile)) {
+        return {
+          ok: false,
+          error: "Please share a valid 10-digit mobile number so we can follow up.",
+        };
+      }
+    }
+  }
 
   const db = getDb();
 
@@ -180,6 +224,8 @@ export async function submitFeedback(p: SubmitPayload): Promise<SubmitResult> {
     negativeTags: p.negativeTags,
     comment: p.comment || null,
     contact: p.contact || null,
+    name: name || null,
+    mobile: mobile || null,
     deviceId: DEVICE_ID,
     autoTicket: p.overall > 0 && p.overall <= 2,
   });
@@ -203,6 +249,7 @@ export async function toggleStoreLive(storeId: string): Promise<AdminData> {
 export type SaveConfigInput = {
   centreId: string;
   activeCategories: string[];
+  customCategories: { id: string; name: string }[];
   positiveTags: string[];
   negativeTags: string[];
   showComment: boolean;
@@ -218,6 +265,7 @@ export async function saveCentreConfig(input: SaveConfigInput): Promise<{ ok: tr
     .update(centreConfig)
     .set({
       activeCategories: input.activeCategories,
+      customCategories: input.customCategories,
       positiveTags: input.positiveTags,
       negativeTags: input.negativeTags,
       showComment: input.showComment,
@@ -232,4 +280,156 @@ export async function saveCentreConfig(input: SaveConfigInput): Promise<{ ok: tr
 export async function getRecentFeedback(limit = 5) {
   const db = getDb();
   return db.select().from(feedback).orderBy(desc(feedback.createdAt)).limit(limit);
+}
+
+// --- Admin user management ---
+
+export type AdminUserView = {
+  id: number;
+  username: string;
+  createdAt: string;
+};
+
+export async function listAdminUsers(): Promise<AdminUserView[]> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: adminUsers.id,
+      username: adminUsers.username,
+      createdAt: adminUsers.createdAt,
+    })
+    .from(adminUsers)
+    .orderBy(desc(adminUsers.createdAt));
+  return rows.map((r) => ({
+    id: r.id,
+    username: r.username,
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+export type AdminUserMutationResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function addAdminUser(
+  username: string,
+  password: string,
+): Promise<AdminUserMutationResult> {
+  const u = (username ?? "").trim();
+  if (!u) return { ok: false, error: "Login ID is required." };
+  if (!/^[A-Za-z0-9._\-+@]{3,64}$/.test(u)) {
+    return {
+      ok: false,
+      error:
+        "Login ID must be 3–64 chars (letters, digits, or any of . _ - + @). Emails are fine.",
+    };
+  }
+  if (!password || password.length < 6) {
+    return { ok: false, error: "Password must be at least 6 characters." };
+  }
+  const db = getDb();
+  const existing = await db
+    .select({ id: adminUsers.id })
+    .from(adminUsers)
+    .where(eq(adminUsers.username, u))
+    .limit(1);
+  if (existing.length > 0) {
+    return { ok: false, error: "A user with that username already exists." };
+  }
+  const passwordHash = await hashPassword(password);
+  await db.insert(adminUsers).values({ username: u, passwordHash });
+  return { ok: true };
+}
+
+export async function deleteAdminUser(
+  id: number,
+): Promise<AdminUserMutationResult> {
+  const db = getDb();
+  await db.delete(adminUsers).where(eq(adminUsers.id, id));
+  return { ok: true };
+}
+
+// --- Feedback log (admin) ---
+
+export type FeedbackLogRow = {
+  id: number;
+  ref: string;
+  centreId: string;
+  centreName: string;
+  vendorId: string;
+  vendorName: string;
+  overall: number;
+  categoryRatings: Record<string, number>;
+  positiveTags: string[];
+  negativeTags: string[];
+  comment: string | null;
+  name: string | null;
+  mobile: string | null;
+  contact: string | null;
+  autoTicket: boolean;
+  createdAt: string;
+};
+
+export type FeedbackLogFilter = {
+  centreId?: string;
+  minRating?: number;
+  limit?: number;
+};
+
+export async function getAllFeedback(
+  filter: FeedbackLogFilter = {},
+): Promise<FeedbackLogRow[]> {
+  const db = getDb();
+  const conds = [] as ReturnType<typeof eq>[];
+  if (filter.centreId) conds.push(eq(feedback.centreId, filter.centreId));
+  if (typeof filter.minRating === "number" && filter.minRating > 0) {
+    conds.push(gte(feedback.overall, filter.minRating));
+  }
+  const selection = db
+    .select({
+      id: feedback.id,
+      ref: feedback.ref,
+      centreId: feedback.centreId,
+      centreName: centres.name,
+      vendorId: feedback.vendorId,
+      vendorName: stores.name,
+      overall: feedback.overall,
+      categoryRatings: feedback.categoryRatings,
+      positiveTags: feedback.positiveTags,
+      negativeTags: feedback.negativeTags,
+      comment: feedback.comment,
+      name: feedback.name,
+      mobile: feedback.mobile,
+      contact: feedback.contact,
+      autoTicket: feedback.autoTicket,
+      createdAt: feedback.createdAt,
+    })
+    .from(feedback)
+    .leftJoin(centres, eq(centres.id, feedback.centreId))
+    .leftJoin(stores, eq(stores.id, feedback.vendorId));
+
+  const filtered =
+    conds.length > 0 ? selection.where(and(...conds)) : selection;
+  const rows = await filtered
+    .orderBy(desc(feedback.createdAt))
+    .limit(filter.limit ?? 500);
+
+  return rows.map((r) => ({
+    id: r.id,
+    ref: r.ref,
+    centreId: r.centreId,
+    centreName: r.centreName ?? r.centreId,
+    vendorId: r.vendorId,
+    vendorName: r.vendorName ?? r.vendorId,
+    overall: r.overall,
+    categoryRatings: r.categoryRatings,
+    positiveTags: r.positiveTags,
+    negativeTags: r.negativeTags,
+    comment: r.comment,
+    name: r.name,
+    mobile: r.mobile,
+    contact: r.contact,
+    autoTicket: r.autoTicket,
+    createdAt: r.createdAt.toISOString(),
+  }));
 }

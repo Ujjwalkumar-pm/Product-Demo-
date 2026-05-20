@@ -33,6 +33,10 @@ export const centreConfig = pgTable("centre_config", {
   activeCategories: jsonb("active_categories").$type<string[]>().notNull(),
   positiveTags: jsonb("positive_tags").$type<string[]>().notNull(),
   negativeTags: jsonb("negative_tags").$type<string[]>().notNull(),
+  customCategories: jsonb("custom_categories")
+    .$type<{ id: string; name: string }[]>()
+    .notNull()
+    .default([]),
   showComment: boolean("show_comment").notNull().default(true),
   askContact: boolean("ask_contact").notNull().default(true),
   mandatoryContactLow: boolean("mandatory_contact_low").notNull().default(false),
@@ -57,11 +61,21 @@ export const feedback = pgTable("feedback", {
   negativeTags: jsonb("negative_tags").$type<string[]>().notNull(),
   comment: text("comment"),
   contact: text("contact"),
+  name: text("name"),
+  mobile: text("mobile"),
   deviceId: text("device_id").notNull(),
   autoTicket: boolean("auto_ticket").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const adminUsers = pgTable("admin_users", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type FeedbackRow = typeof feedback.$inferSelect;
 export type CentreConfigRow = typeof centreConfig.$inferSelect;
 export type StoreRow = typeof stores.$inferSelect;
+export type AdminUserRow = typeof adminUsers.$inferSelect;

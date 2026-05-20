@@ -8,6 +8,8 @@ import {
   type AdminData,
 } from "@/lib/actions";
 import { allCategories, type Centre } from "@/lib/seed-data";
+import AdminCredentials from "./AdminCredentials";
+import AdminFeedbackLog from "./AdminFeedbackLog";
 
 export default function AdminView({
   centres,
@@ -18,11 +20,14 @@ export default function AdminView({
   initialData: AdminData;
   onCafeAffected: (centreId: string) => void;
 }) {
+  type Section = "access" | "config" | "report";
+  const [section, setSection] = useState<Section>("access");
   const [data, setData] = useState<AdminData>(initialData);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [posDraft, setPosDraft] = useState("");
   const [negDraft, setNegDraft] = useState("");
+  const [catDraft, setCatDraft] = useState("");
 
   const centre = centres.find((c) => c.id === data.centreId);
   const liveCount = data.stores.filter((s) => s.live).length;
@@ -56,6 +61,34 @@ export default function AdminView({
       activeCategories: d.activeCategories.includes(id)
         ? d.activeCategories.filter((c) => c !== id)
         : [...d.activeCategories, id],
+    }));
+    dirty();
+  };
+
+  const addCustomCategory = () => {
+    const name = catDraft.trim();
+    if (!name) return;
+    const slug = name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 24);
+    const suffix = Math.random().toString(36).slice(2, 6);
+    const id = `${slug || "cat"}-${suffix}`;
+    setData((d) => ({
+      ...d,
+      customCategories: [...d.customCategories, { id, name }],
+      activeCategories: [...d.activeCategories, id],
+    }));
+    setCatDraft("");
+    dirty();
+  };
+
+  const removeCustomCategory = (id: string) => {
+    setData((d) => ({
+      ...d,
+      customCategories: d.customCategories.filter((c) => c.id !== id),
+      activeCategories: d.activeCategories.filter((c) => c !== id),
     }));
     dirty();
   };
@@ -102,6 +135,7 @@ export default function AdminView({
     await saveCentreConfig({
       centreId: data.centreId,
       activeCategories: data.activeCategories,
+      customCategories: data.customCategories,
       positiveTags: data.positiveTags,
       negativeTags: data.negativeTags,
       showComment: data.showComment,
@@ -115,7 +149,7 @@ export default function AdminView({
   };
 
   return (
-    <div className="admin-stage">
+    <div className={`admin-stage ${section === "config" ? "" : "solo"}`}>
       <div className="admin-main">
         <div>
           <div className="breadcrumb">
@@ -125,11 +159,47 @@ export default function AdminView({
             Cafe Feedback <em>Configuration</em>
           </h1>
           <div className="page-sub">
-            Pick a centre, mark the stores that are live for tablet feedback, and
-            shape the questions employees see.
+            {section === "access" &&
+              "Choose the centre, manage tablet logins, and mark the stores that are live for feedback."}
+            {section === "config" &&
+              "Shape the questions employees see, the quick tags, and what happens after feedback is submitted."}
+            {section === "report" &&
+              "Review every submission collected from the cafe tablets and export them to Excel."}
           </div>
         </div>
 
+        <div className="admin-subtabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === "access"}
+            className={`admin-subtab ${section === "access" ? "active" : ""}`}
+            onClick={() => setSection("access")}
+          >
+            <span className="num">1</span>Login &amp; Stores
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === "config"}
+            className={`admin-subtab ${section === "config" ? "active" : ""}`}
+            onClick={() => setSection("config")}
+          >
+            <span className="num">2</span>Feedback &amp; Questionnaire Config
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={section === "report"}
+            className={`admin-subtab ${section === "report" ? "active" : ""}`}
+            onClick={() => setSection("report")}
+          >
+            <span className="num">3</span>Feedback Report
+          </button>
+        </div>
+
+        {section === "access" && (
+          <>
         {/* 1. Centre selector */}
         <div className="card">
           <div className="card-header">
@@ -169,11 +239,14 @@ export default function AdminView({
           </div>
         </div>
 
+        {/* Cafe PWA login credentials */}
+        <AdminCredentials />
+
         {/* 2. Stores */}
         <div className="card">
           <div className="card-header">
             <div className="card-h">
-              <span className="num">2</span>Stores at this centre
+              <span className="num">3</span>Stores at this centre
             </div>
             <div style={{ fontSize: 11, color: "var(--ink-3)" }}>
               <span>{liveCount}</span> of <span>{totalCount}</span> stores live
@@ -217,11 +290,16 @@ export default function AdminView({
           </div>
         </div>
 
+          </>
+        )}
+
+        {section === "config" && (
+          <>
         {/* 3. Question config */}
         <div className="card">
           <div className="card-header">
             <div className="card-h">
-              <span className="num">3</span>What employees are asked
+              <span className="num">1</span>What employees are asked
             </div>
             <div style={{ fontSize: 11, color: "var(--ink-3)" }}>
               Applies to all live stores at this centre
@@ -245,6 +323,49 @@ export default function AdminView({
                   {c.name}
                 </label>
               ))}
+              {data.customCategories.map((c) => (
+                <label
+                  key={c.id}
+                  className={`checkbox-item custom ${data.activeCategories.includes(c.id) ? "checked" : ""}`}
+                  onClick={() => toggleCat(c.id)}
+                >
+                  <span className="cb-box">✓</span>
+                  <span className="cat-name-text">{c.name}</span>
+                  <span
+                    className="cat-remove"
+                    title="Remove this custom category"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeCustomCategory(c.id);
+                    }}
+                  >
+                    ×
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="add-cat-row">
+              <input
+                className="add-chip-input"
+                placeholder="+ add category (e.g. Ambience, Packaging)"
+                value={catDraft}
+                onChange={(e) => setCatDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCustomCategory();
+                  }
+                }}
+                maxLength={32}
+              />
+              <button
+                type="button"
+                className="add-cat-btn"
+                onClick={addCustomCategory}
+                disabled={!catDraft.trim()}
+              >
+                Add
+              </button>
             </div>
           </div>
 
@@ -331,7 +452,7 @@ export default function AdminView({
         <div className="card">
           <div className="card-header">
             <div className="card-h">
-              <span className="num">4</span>What happens with the feedback
+              <span className="num">2</span>What happens with the feedback
             </div>
           </div>
           <div className="editor-block" style={{ marginBottom: 0 }}>
@@ -423,9 +544,16 @@ export default function AdminView({
             </button>
           </div>
         </div>
+          </>
+        )}
+
+        {section === "report" && (
+          <AdminFeedbackLog centres={centres} />
+        )}
       </div>
 
-      {/* LIVE PREVIEW PANEL */}
+      {/* LIVE PREVIEW PANEL — only on the Config tab */}
+      {section === "config" && (
       <div className="preview-panel">
         <div className="pp-header">
           <div className="pp-eyebrow">
@@ -496,6 +624,7 @@ export default function AdminView({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
