@@ -213,21 +213,11 @@ export default function CafeView({
     : null;
   const contextPill = vendorName ?? config.centreShort;
 
-  const lowRating = state.overall > 0 && state.overall <= 2;
-  const contactRequired = Boolean(config.mandatoryContactLow) && lowRating;
   const trimmedName = state.name.trim();
   const trimmedMobile = state.mobile.trim();
   const mobileFormatBad = trimmedMobile !== "" && !MOBILE_RE.test(trimmedMobile);
 
   const submit = async () => {
-    if (contactRequired && !trimmedName) {
-      setError("Please share your name so we can follow up.");
-      return;
-    }
-    if (contactRequired && !MOBILE_RE.test(trimmedMobile)) {
-      setError("Please enter a valid 10-digit mobile number.");
-      return;
-    }
     if (mobileFormatBad) {
       setError("Mobile number must be exactly 10 digits.");
       return;
@@ -271,11 +261,7 @@ export default function CafeView({
 
   const idx = screens.indexOf(currentScreen);
   const footerHidden = currentScreen === "welcome" || currentScreen === "ty";
-  const commentBlocked =
-    currentScreen === "comment" &&
-    (mobileFormatBad ||
-      (contactRequired &&
-        (!trimmedName || !MOBILE_RE.test(trimmedMobile))));
+  const commentBlocked = currentScreen === "comment" && mobileFormatBad;
   const nextDisabled =
     (currentScreen === "vendor" && !state.vendorId) ||
     (currentScreen === "rate" && state.overall === 0) ||
@@ -523,15 +509,13 @@ export default function CafeView({
                   }
                 />
               )}
-              {(config.askContact || contactRequired) && (
+              {config.askContact && (
                 <>
                   <div className="contact-row">
                     <span style={{ fontSize: 18 }}>✱</span>
                     <input
                       type="text"
-                      placeholder={
-                        contactRequired ? "Name (required)" : "Name (optional)"
-                      }
+                      placeholder="Name (optional)"
                       value={state.name}
                       autoComplete="name"
                       onChange={(e) =>
@@ -546,11 +530,7 @@ export default function CafeView({
                       inputMode="numeric"
                       pattern="\d{10}"
                       maxLength={10}
-                      placeholder={
-                        contactRequired
-                          ? "10-digit mobile (required)"
-                          : "10-digit mobile (optional)"
-                      }
+                      placeholder="10-digit mobile (optional)"
                       value={state.mobile}
                       autoComplete="tel-national"
                       onChange={(e) => {
@@ -561,19 +541,6 @@ export default function CafeView({
                   </div>
                 </>
               )}
-              {contactRequired && (
-                <p
-                  style={{
-                    fontSize: 10,
-                    color: "var(--red)",
-                    marginTop: 8,
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Low ratings need a contact — please share your name and mobile
-                  so we can follow up.
-                </p>
-              )}
               <p
                 style={{
                   fontSize: 10,
@@ -582,9 +549,8 @@ export default function CafeView({
                   lineHeight: 1.5,
                 }}
               >
-                {contactRequired
-                  ? "We'll only reach out about this service issue."
-                  : "Leave blank to stay anonymous. We'll only reach out if you share contact and there's a service issue."}
+                Leave blank to stay anonymous. We&apos;ll only reach out if you
+                share contact and there&apos;s a service issue.
               </p>
               {mobileFormatBad && (
                 <p

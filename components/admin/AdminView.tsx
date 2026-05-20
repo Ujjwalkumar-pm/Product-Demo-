@@ -115,9 +115,7 @@ export default function AdminView({
     dirty();
   };
 
-  const toggleFlag = (
-    key: "showComment" | "askContact" | "mandatoryContactLow",
-  ) => {
+  const toggleFlag = (key: "showComment" | "askContact") => {
     setData((d) => ({ ...d, [key]: !d[key] }));
     dirty();
   };
@@ -140,7 +138,6 @@ export default function AdminView({
       negativeTags: data.negativeTags,
       showComment: data.showComment,
       askContact: data.askContact,
-      mandatoryContactLow: data.mandatoryContactLow,
       routing: data.routing,
     });
     setSaving(false);
@@ -435,14 +432,8 @@ export default function AdminView({
                 className={`checkbox-item ${data.askContact ? "checked" : ""}`}
                 onClick={() => toggleFlag("askContact")}
               >
-                <span className="cb-box">✓</span>Ask for mobile/employee ID
-                (optional)
-              </label>
-              <label
-                className={`checkbox-item ${data.mandatoryContactLow ? "checked" : ""}`}
-                onClick={() => toggleFlag("mandatoryContactLow")}
-              >
-                <span className="cb-box">✓</span>Make contact mandatory if ≤2★
+                <span className="cb-box">✓</span>Ask for name &amp; mobile
+                (always optional)
               </label>
             </div>
           </div>

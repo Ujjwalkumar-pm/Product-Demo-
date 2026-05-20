@@ -35,7 +35,6 @@ export type CafeConfig = {
   negativeTags: string[];
   showComment: boolean;
   askContact: boolean;
-  mandatoryContactLow: boolean;
 };
 
 export type AdminStore = {
@@ -55,7 +54,6 @@ export type AdminData = {
   negativeTags: string[];
   showComment: boolean;
   askContact: boolean;
-  mandatoryContactLow: boolean;
   routing: Routing;
 };
 
@@ -76,7 +74,6 @@ async function ensureConfig(centreId: string) {
       negativeTags: defaultNegTags,
       showComment: true,
       askContact: true,
-      mandatoryContactLow: false,
       routing: defaultRouting,
     })
     .returning();
@@ -108,7 +105,6 @@ export async function getCafeConfig(centreId: string): Promise<CafeConfig> {
     negativeTags: cfg.negativeTags,
     showComment: cfg.showComment,
     askContact: cfg.askContact,
-    mandatoryContactLow: cfg.mandatoryContactLow,
   };
 }
 
@@ -136,7 +132,6 @@ export async function getAdminData(centreId: string): Promise<AdminData> {
     negativeTags: cfg.negativeTags,
     showComment: cfg.showComment,
     askContact: cfg.askContact,
-    mandatoryContactLow: cfg.mandatoryContactLow,
     routing: cfg.routing,
   };
 }
@@ -167,26 +162,10 @@ export async function submitFeedback(p: SubmitPayload): Promise<SubmitResult> {
   const name = (p.name ?? "").trim();
   const mobile = (p.mobile ?? "").trim();
 
-  // 10-digit mobile validation whenever a mobile is provided.
+  // 10-digit mobile validation whenever a mobile is provided. Name + mobile
+  // are always optional — there is no longer a low-rating contact gate.
   if (mobile && !MOBILE_RE.test(mobile)) {
     return { ok: false, error: "Mobile number must be exactly 10 digits." };
-  }
-
-  // Low-rating gate: when this centre requires contact on low ratings,
-  // name + mobile become mandatory for overall ≤ 2.
-  if (p.overall <= 2) {
-    const cfg = await ensureConfig(p.centreId);
-    if (cfg.mandatoryContactLow) {
-      if (!name) {
-        return { ok: false, error: "Please share your name so we can follow up." };
-      }
-      if (!MOBILE_RE.test(mobile)) {
-        return {
-          ok: false,
-          error: "Please share a valid 10-digit mobile number so we can follow up.",
-        };
-      }
-    }
   }
 
   const db = getDb();
@@ -254,7 +233,6 @@ export type SaveConfigInput = {
   negativeTags: string[];
   showComment: boolean;
   askContact: boolean;
-  mandatoryContactLow: boolean;
   routing: Routing;
 };
 
@@ -270,7 +248,6 @@ export async function saveCentreConfig(input: SaveConfigInput): Promise<{ ok: tr
       negativeTags: input.negativeTags,
       showComment: input.showComment,
       askContact: input.askContact,
-      mandatoryContactLow: input.mandatoryContactLow,
       routing: input.routing,
     })
     .where(eq(centreConfig.centreId, input.centreId));
